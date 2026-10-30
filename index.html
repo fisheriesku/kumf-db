@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -49,21 +49,21 @@ dt{color:var(--mute)}
 <body>
 <header><div>
 <h1><a href="#">KUMF Fish Collection Database</a></h1>
-<p>Kasetsart University Museum of Fisheries · ฐานข้อมูลตัวอย่างปลา</p>
+<p>Kasetsart University Museum of Fisheries · Fish specimen collection</p>
 </div></header>
-<main id="app"><p>กำลังโหลดข้อมูล…</p></main>
+<main id="app"><p>Loading data…</p></main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script>
-/* ===== ตั้งค่า ===== */
-// ใส่ลิงก์ CSV จาก Google Sheet: File > Share > Publish to web > เลือกชีต + CSV
-// เว้นว่างไว้ = ใช้ข้อมูลตัวอย่างด้านล่าง
+/* ===== Settings ===== */
+// Paste the CSV link from Google Sheets: File > Share > Publish to web > choose the sheet + CSV
+// Leave empty to use the sample data below
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTm1bPaXaaBYnV7VkiwXJnrTUKnGvWTIKebbEj47pD-ARrvDnSH-ztazdxlMUShYibKsHXYV6Vk0LJV/pub?output=csv";
-const IMAGE_DIR = "images/";   // ไฟล์รูปตั้งชื่อตาม Voucher ID เช่น KUMF_7778_1.jpg
+const IMAGE_DIR = "images/";   // Name image files after the Voucher ID, e.g. KUMF_7778_1.jpg
 
 const SAMPLE = [{"Collection ID":"KUMF 7778","Voucher ID":"KUMF 7778.1","Tissue ID":"KUMF T-7778.1","Scientific Name":"Soleichthys siammakuti","Author":"(Wongratana, 1975)","Family":"Soleidae","Amount":"2","Preserved in":"Fixed in formalin preserved in EtOH","Collect Date":"2026-09-19","Locality":"Chonburi","Latitude":"","Longitude":"","Depth":"","Gear":"","Collector":"Tongboonkua P.","Identifier":"Tongboonkua P.","Iden. Date":"2026-09-19","Parts":"","Length":"","Weight":"","Type":"","Field ID":"PTKU 2155","Remarks":""}];
 
-/* ===== โหลดข้อมูล ===== */
+/* ===== Load data ===== */
 function parseCSV(t){let rows=[];let r=[],f="",q=false;
  for(let i=0;i<t.length;i++){const c=t[i];
   if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
@@ -74,7 +74,7 @@ function parseCSV(t){let rows=[];let r=[],f="",q=false;
  const norm=s=>s.replace(/^\uFEFF/,"").trim().replace(/\s+/g," ");
  const known=Object.fromEntries([...FIELDS,"Scientific Name","Author"].map(k=>[k.toLowerCase(),k]));
  const hi=rows.findIndex(x=>x.filter(v=>known[norm(v).toLowerCase()]).length>=3);
- if(hi<0)throw new Error("ไม่พบแถวหัวคอลัมน์ในชีต (ควรมี Voucher ID, Scientific Name, Family ฯลฯ) แถวแรกที่พบ: "+(rows[0]||[]).slice(0,5).join(", "));
+ if(hi<0)throw new Error("No header row found in the sheet (it should include Voucher ID, Scientific Name, Family, etc.). First row found: "+(rows[0]||[]).slice(0,5).join(", "));
  const h=rows[hi].map(v=>known[norm(v).toLowerCase()]||norm(v));rows=rows.slice(hi+1);
  return rows.filter(x=>x.some(v=>v.trim())).map(x=>Object.fromEntries(h.map((k,i)=>[k,(x[i]||"").trim()])))}
 let DATA=[];
@@ -84,35 +84,35 @@ const key=r=>r["Voucher ID"]||r["Collection ID"];
 async function load(){
  if(!SHEET_CSV_URL){DATA=SAMPLE;return}
  const res=await fetch(SHEET_CSV_URL);
- if(!res.ok)throw new Error("โหลด Google Sheet ไม่สำเร็จ ("+res.status+")");
+ if(!res.ok)throw new Error("Could not load the Google Sheet ("+res.status+")");
  DATA=parseCSV(await res.text())}
 
-/* ===== หน้ารายการ ===== */
+/* ===== List page ===== */
 function list(){
  const fams=[...new Set(DATA.map(r=>r.Family).filter(Boolean))].sort();
  app.innerHTML=`<div class="bar">
-  <input id="q" type="search" placeholder="ค้นหาชื่อวิทยาศาสตร์ รหัส สถานที่ ผู้เก็บ…" aria-label="ค้นหา">
-  <select id="fam" aria-label="วงศ์"><option value="">ทุกวงศ์</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select></div>
+  <input id="q" type="search" placeholder="Search scientific name, ID, locality, collector…" aria-label="Search">
+  <select id="fam" aria-label="Family"><option value="">All families</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select></div>
   <p class="count" id="n"></p>
   <div class="wrap"><table><thead><tr><th>Voucher ID</th><th>Scientific name</th><th>Family</th><th>Locality</th><th>Collect date</th></tr></thead><tbody id="tb"></tbody></table></div>`;
  const draw=()=>{
   const q=document.getElementById("q").value.toLowerCase(),f=document.getElementById("fam").value;
   const rows=DATA.filter(r=>(!f||r.Family===f)&&(!q||Object.values(r).join(" ").toLowerCase().includes(q)));
-  document.getElementById("n").textContent=`พบ ${rows.length} จาก ${DATA.length} รายการ`;
+  document.getElementById("n").textContent=`${rows.length} of ${DATA.length} records`;
   document.getElementById("tb").innerHTML=rows.map(r=>`<tr tabindex="0" data-k="${esc(key(r))}"><td>${esc(key(r))}</td><td class="i">${esc(r["Scientific Name"])}</td><td>${esc(r.Family)}</td><td>${esc(r.Locality)}</td><td>${esc(r["Collect Date"])}</td></tr>`).join("")};
  q.oninput=fam.onchange=draw;draw();
  tb.onclick=e=>{const t=e.target.closest("tr");if(t)location.hash="id="+encodeURIComponent(t.dataset.k)};
  tb.onkeydown=e=>{if(e.key=="Enter")e.target.click()}}
 
-/* ===== หน้า record ===== */
+/* ===== Record page ===== */
 const FIELDS=["Collection ID","Voucher ID","Tissue ID","Family","Amount","Parts","Length","Weight","Type","Preserved in","Collect Date","Gear","Collector","Identifier","Iden. Date","Locality","Latitude","Longitude","Depth","Field ID","Remarks"];
 function record(id){
  const r=DATA.find(x=>key(x)===id);
- if(!r){app.innerHTML=`<a class="back" href="#">← กลับ</a><p class="err">ไม่พบรายการ ${esc(id)}</p>`;return}
+ if(!r){app.innerHTML=`<a class="back" href="#">← Back</a><p class="err">Record ${esc(id)} not found</p>`;return}
  const img=IMAGE_DIR+slug(key(r))+".jpg";
  const lat=parseFloat(r.Latitude),lng=parseFloat(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
- app.innerHTML=`<a class="back" href="#">← กลับไปรายการ</a><div class="rec"><div>
-  <div class="photo"><img src="${esc(img)}" alt="${esc(r["Scientific Name"])}" onerror="this.parentNode.innerHTML='<p>ยังไม่มีรูปตัวอย่าง<br>(ใส่ไฟล์ ${esc(slug(key(r)))}.jpg ในโฟลเดอร์ images)</p>'"></div>
+ app.innerHTML=`<a class="back" href="#">← Back to list</a><div class="rec"><div>
+  <div class="photo"><img src="${esc(img)}" alt="${esc(r["Scientific Name"])}" onerror="this.parentNode.innerHTML='<p>No specimen photo yet<br>(add ${esc(slug(key(r)))}.jpg to the images folder)</p>'"></div>
   ${geo?'<div id="map"></div>':""}</div>
   <div><h2 class="i">${esc(r["Scientific Name"])}</h2><p class="au">${esc(r.Author)}</p>
   <dl>${FIELDS.filter(k=>r[k]).map(k=>`<dt>${esc(k)}</dt><dd>${esc(r[k])}</dd>`).join("")}</dl></div></div>`;
@@ -122,7 +122,7 @@ function record(id){
 
 function route(){const m=location.hash.match(/^#id=(.+)/);m?record(decodeURIComponent(m[1])):list()}
 load().then(()=>{addEventListener("hashchange",route);route()})
- .catch(e=>{app.innerHTML=`<p class="err">${esc(e.message)}<br>ตรวจว่าได้ Publish to web เป็น CSV แล้ว และลิงก์ถูกต้อง</p>`});
+ .catch(e=>{app.innerHTML=`<p class="err">${esc(e.message)}<br>Check that the sheet is published to the web as CSV and the link is correct.</p>`});
 </script>
 </body>
 </html>
