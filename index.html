@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KUMF Fish Collection Database</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,600;1,400&family=Sarabun:wght@400;600&display=swap">
+<style>
+:root{--bg:#f6f7f5;--ink:#10262e;--mute:#5d6f75;--line:#d5dcd9;--sea:#0b3a4a;--amber:#e0a100;--panel:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#0c171b;--ink:#e8eeec;--mute:#9bb0b5;--line:#25393f;--sea:#06232d;--amber:#f2b922;--panel:#122429}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Sarabun,system-ui,sans-serif}
+a{color:inherit}
+header{background:var(--sea);color:#eef4f2;padding:28px 20px 22px;border-bottom:4px solid var(--amber)}
+header div{max-width:1040px;margin:auto}
+header h1{margin:0;font:600 clamp(24px,4vw,34px)/1.15 Newsreader,Georgia,serif}
+header p{margin:6px 0 0;color:#b9cfd0}
+header a{text-decoration:none}
+main{max-width:1040px;margin:auto;padding:22px 20px 60px}
+.i{font-family:Newsreader,Georgia,serif;font-style:italic}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+input,select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+input{flex:1 1 260px}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.count{color:var(--mute);margin:0 0 8px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--mute);font-size:14px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:color-mix(in srgb,var(--amber) 12%,transparent)}
+tr:last-child td{border-bottom:0}
+.rec{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px;align-items:start}
+@media(max-width:760px){.rec{grid-template-columns:1fr}}
+.photo{background:#000;border-radius:6px;overflow:hidden}
+.photo img{display:block;width:100%}
+.photo p{margin:0;padding:40px 16px;color:#9bb0b5;text-align:center}
+#map{height:240px;margin-top:16px;border-radius:6px;border:1px solid var(--line)}
+h2{font:600 clamp(24px,4vw,32px)/1.2 Newsreader,Georgia,serif;margin:0 0 2px}
+.au{color:var(--mute);margin:0 0 16px}
+dl{display:grid;grid-template-columns:150px 1fr;margin:0;border-top:1px solid var(--line)}
+dt,dd{margin:0;padding:8px 0;border-bottom:1px solid var(--line)}
+dt{color:var(--mute)}
+.back{display:inline-block;margin-bottom:16px}
+.err{padding:12px 14px;border-left:4px solid var(--amber);background:var(--panel)}
+</style>
+</head>
+<body>
+<header><div>
+<h1><a href="#">KUMF Fish Collection Database</a></h1>
+<p>Kasetsart University Museum of Fisheries · ฐานข้อมูลตัวอย่างปลา</p>
+</div></header>
+<main id="app"><p>กำลังโหลดข้อมูล…</p></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/* ===== ตั้งค่า ===== */
+// ใส่ลิงก์ CSV จาก Google Sheet: File > Share > Publish to web > เลือกชีต + CSV
+// เว้นว่างไว้ = ใช้ข้อมูลตัวอย่างด้านล่าง
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTm1bPaXaaBYnV7VkiwXJnrTUKnGvWTIKebbEj47pD-ARrvDnSH-ztazdxlMUShYibKsHXYV6Vk0LJV/pubhtml";
+const IMAGE_DIR = "images/";   // ไฟล์รูปตั้งชื่อตาม Voucher ID เช่น KUMF_7778_1.jpg
+
+const SAMPLE = [{"Collection ID":"KUMF 7778","Voucher ID":"KUMF 7778.1","Tissue ID":"KUMF T-7778.1","Scientific Name":"Soleichthys siammakuti","Author":"(Wongratana, 1975)","Family":"Soleidae","Amount":"2","Preserved in":"Fixed in formalin preserved in EtOH","Collect Date":"2026-09-19","Locality":"Chonburi","Latitude":"","Longitude":"","Depth":"","Gear":"","Collector":"Tongboonkua P.","Identifier":"Tongboonkua P.","Iden. Date":"2026-09-19","Parts":"","Length":"","Weight":"","Type":"","Field ID":"PTKU 2155","Remarks":""}];
+
+/* ===== โหลดข้อมูล ===== */
+function parseCSV(t){const rows=[];let r=[],f="",q=false;
+ for(let i=0;i<t.length;i++){const c=t[i];
+  if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+  else if(c=='"')q=true;else if(c==',')(r.push(f),f="");
+  else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;r.push(f);rows.push(r);r=[];f=""}
+  else f+=c}
+ if(f||r.length){r.push(f);rows.push(r)}
+ const h=rows.shift().map(s=>s.trim());
+ return rows.filter(x=>x.some(v=>v.trim())).map(x=>Object.fromEntries(h.map((k,i)=>[k,(x[i]||"").trim()])))}
+let DATA=[];
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const slug=v=>v.replace(/[\s.]+/g,"_");
+const key=r=>r["Voucher ID"]||r["Collection ID"];
+async function load(){
+ if(!SHEET_CSV_URL){DATA=SAMPLE;return}
+ const res=await fetch(SHEET_CSV_URL);
+ if(!res.ok)throw new Error("โหลด Google Sheet ไม่สำเร็จ ("+res.status+")");
+ DATA=parseCSV(await res.text())}
+
+/* ===== หน้ารายการ ===== */
+function list(){
+ const fams=[...new Set(DATA.map(r=>r.Family).filter(Boolean))].sort();
+ app.innerHTML=`<div class="bar">
+  <input id="q" type="search" placeholder="ค้นหาชื่อวิทยาศาสตร์ รหัส สถานที่ ผู้เก็บ…" aria-label="ค้นหา">
+  <select id="fam" aria-label="วงศ์"><option value="">ทุกวงศ์</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select></div>
+  <p class="count" id="n"></p>
+  <div class="wrap"><table><thead><tr><th>Voucher ID</th><th>Scientific name</th><th>Family</th><th>Locality</th><th>Collect date</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+ const draw=()=>{
+  const q=document.getElementById("q").value.toLowerCase(),f=document.getElementById("fam").value;
+  const rows=DATA.filter(r=>(!f||r.Family===f)&&(!q||Object.values(r).join(" ").toLowerCase().includes(q)));
+  document.getElementById("n").textContent=`พบ ${rows.length} จาก ${DATA.length} รายการ`;
+  document.getElementById("tb").innerHTML=rows.map(r=>`<tr tabindex="0" data-k="${esc(key(r))}"><td>${esc(key(r))}</td><td class="i">${esc(r["Scientific Name"])}</td><td>${esc(r.Family)}</td><td>${esc(r.Locality)}</td><td>${esc(r["Collect Date"])}</td></tr>`).join("")};
+ q.oninput=fam.onchange=draw;draw();
+ tb.onclick=e=>{const t=e.target.closest("tr");if(t)location.hash="id="+encodeURIComponent(t.dataset.k)};
+ tb.onkeydown=e=>{if(e.key=="Enter")e.target.click()}}
+
+/* ===== หน้า record ===== */
+const FIELDS=["Collection ID","Voucher ID","Tissue ID","Family","Amount","Parts","Length","Weight","Type","Preserved in","Collect Date","Gear","Collector","Identifier","Iden. Date","Locality","Latitude","Longitude","Depth","Field ID","Remarks"];
+function record(id){
+ const r=DATA.find(x=>key(x)===id);
+ if(!r){app.innerHTML=`<a class="back" href="#">← กลับ</a><p class="err">ไม่พบรายการ ${esc(id)}</p>`;return}
+ const img=IMAGE_DIR+slug(key(r))+".jpg";
+ const lat=parseFloat(r.Latitude),lng=parseFloat(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
+ app.innerHTML=`<a class="back" href="#">← กลับไปรายการ</a><div class="rec"><div>
+  <div class="photo"><img src="${esc(img)}" alt="${esc(r["Scientific Name"])}" onerror="this.parentNode.innerHTML='<p>ยังไม่มีรูปตัวอย่าง<br>(ใส่ไฟล์ ${esc(slug(key(r)))}.jpg ในโฟลเดอร์ images)</p>'"></div>
+  ${geo?'<div id="map"></div>':""}</div>
+  <div><h2 class="i">${esc(r["Scientific Name"])}</h2><p class="au">${esc(r.Author)}</p>
+  <dl>${FIELDS.filter(k=>r[k]).map(k=>`<dt>${esc(k)}</dt><dd>${esc(r[k])}</dd>`).join("")}</dl></div></div>`;
+ if(geo&&window.L){const m=L.map("map").setView([lat,lng],7);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(m);L.marker([lat,lng]).addTo(m)}
+ window.scrollTo(0,0)}
+
+function route(){const m=location.hash.match(/^#id=(.+)/);m?record(decodeURIComponent(m[1])):list()}
+load().then(()=>{addEventListener("hashchange",route);route()})
+ .catch(e=>{app.innerHTML=`<p class="err">${esc(e.message)}<br>ตรวจว่าได้ Publish to web เป็น CSV แล้ว และลิงก์ถูกต้อง</p>`});
+</script>
+</body>
+</html>
