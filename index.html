@@ -58,20 +58,24 @@ dt{color:var(--mute)}
 /* ===== ตั้งค่า ===== */
 // ใส่ลิงก์ CSV จาก Google Sheet: File > Share > Publish to web > เลือกชีต + CSV
 // เว้นว่างไว้ = ใช้ข้อมูลตัวอย่างด้านล่าง
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTm1bPaXaaBYnV7VkiwXJnrTUKnGvWTIKebbEj47pD-ARrvDnSH-ztazdxlMUShYibKsHXYV6Vk0LJV/pubhtml";
+const SHEET_CSV_URL = "";
 const IMAGE_DIR = "images/";   // ไฟล์รูปตั้งชื่อตาม Voucher ID เช่น KUMF_7778_1.jpg
 
 const SAMPLE = [{"Collection ID":"KUMF 7778","Voucher ID":"KUMF 7778.1","Tissue ID":"KUMF T-7778.1","Scientific Name":"Soleichthys siammakuti","Author":"(Wongratana, 1975)","Family":"Soleidae","Amount":"2","Preserved in":"Fixed in formalin preserved in EtOH","Collect Date":"2026-09-19","Locality":"Chonburi","Latitude":"","Longitude":"","Depth":"","Gear":"","Collector":"Tongboonkua P.","Identifier":"Tongboonkua P.","Iden. Date":"2026-09-19","Parts":"","Length":"","Weight":"","Type":"","Field ID":"PTKU 2155","Remarks":""}];
 
 /* ===== โหลดข้อมูล ===== */
-function parseCSV(t){const rows=[];let r=[],f="",q=false;
+function parseCSV(t){let rows=[];let r=[],f="",q=false;
  for(let i=0;i<t.length;i++){const c=t[i];
   if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
   else if(c=='"')q=true;else if(c==',')(r.push(f),f="");
   else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;r.push(f);rows.push(r);r=[];f=""}
   else f+=c}
  if(f||r.length){r.push(f);rows.push(r)}
- const h=rows.shift().map(s=>s.trim());
+ const norm=s=>s.replace(/^\uFEFF/,"").trim().replace(/\s+/g," ");
+ const known=Object.fromEntries([...FIELDS,"Scientific Name","Author"].map(k=>[k.toLowerCase(),k]));
+ const hi=rows.findIndex(x=>x.filter(v=>known[norm(v).toLowerCase()]).length>=3);
+ if(hi<0)throw new Error("ไม่พบแถวหัวคอลัมน์ในชีต (ควรมี Voucher ID, Scientific Name, Family ฯลฯ) แถวแรกที่พบ: "+(rows[0]||[]).slice(0,5).join(", "));
+ const h=rows[hi].map(v=>known[norm(v).toLowerCase()]||norm(v));rows=rows.slice(hi+1);
  return rows.filter(x=>x.some(v=>v.trim())).map(x=>Object.fromEntries(h.map((k,i)=>[k,(x[i]||"").trim()])))}
 let DATA=[];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
