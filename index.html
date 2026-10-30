@@ -44,6 +44,16 @@ dt,dd{margin:0;padding:8px 0;border-bottom:1px solid var(--line)}
 dt{color:var(--mute)}
 .back{display:inline-block;margin-bottom:16px}
 .err{padding:12px 14px;border-left:4px solid var(--amber);background:var(--panel)}
+button{font:inherit;padding:8px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--amber)}button:disabled{opacity:.4;cursor:default}
+th[data-s]{cursor:pointer}th[aria-sort=ascending]::after{content:" ▲"}th[aria-sort=descending]::after{content:" ▼"}
+.pager{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:14px}
+.nav{display:flex;gap:8px;align-items:center;margin-bottom:16px}.nav i{flex:1}.nav span{color:var(--mute)}
+h3{margin:22px 0 4px;font:600 18px/1.2 Newsreader,Georgia,serif}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px}
+.cite{padding:10px 12px;border-left:4px solid var(--amber);background:var(--panel);margin:12px 0 0;word-break:break-word}
+.thumbs{display:flex;gap:6px;padding:8px;background:#111}.thumbs button{padding:4px 12px;background:#222;color:#ddd;border-color:#444}.thumbs [aria-current]{border-color:var(--amber);color:var(--amber)}
+.links{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
 </style>
 </head>
 <body>
@@ -88,34 +98,70 @@ async function load(){
  DATA=parseCSV(await res.text())}
 
 /* ===== List page ===== */
+let SORT="Voucher ID",DIR=1,PAGE=0,VIEW=[];const PER=50;
+const COLS=[["Voucher ID","Voucher ID"],["Scientific Name","Scientific name"],["Family","Family"],["Locality","Locality"],["Collect Date","Collect date"]];
+const saveFile=(n,t,m)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()};
+const cq=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
 function list(){
  const fams=[...new Set(DATA.map(r=>r.Family).filter(Boolean))].sort();
  app.innerHTML=`<div class="bar">
   <input id="q" type="search" placeholder="Search scientific name, ID, locality, collector…" aria-label="Search">
-  <select id="fam" aria-label="Family"><option value="">All families</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select></div>
+  <select id="fam" aria-label="Family"><option value="">All families</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select>
+  <button id="csv">Download CSV</button></div>
   <p class="count" id="n"></p>
-  <div class="wrap"><table><thead><tr><th>Voucher ID</th><th>Scientific name</th><th>Family</th><th>Locality</th><th>Collect date</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+  <div class="wrap"><table><thead><tr>${COLS.map(c=>`<th tabindex="0" data-s="${c[0]}">${c[1]}</th>`).join("")}</tr></thead><tbody id="tb"></tbody></table></div>
+  <div class="pager"><button id="pv">← Previous</button><span id="pg"></span><button id="nx">Next →</button></div>`;
  const draw=()=>{
-  const q=document.getElementById("q").value.toLowerCase(),f=document.getElementById("fam").value;
-  const rows=DATA.filter(r=>(!f||r.Family===f)&&(!q||Object.values(r).join(" ").toLowerCase().includes(q)));
-  document.getElementById("n").textContent=`${rows.length} of ${DATA.length} records`;
-  document.getElementById("tb").innerHTML=rows.map(r=>`<tr tabindex="0" data-k="${esc(key(r))}"><td>${esc(key(r))}</td><td class="i">${esc(r["Scientific Name"])}</td><td>${esc(r.Family)}</td><td>${esc(r.Locality)}</td><td>${esc(r["Collect Date"])}</td></tr>`).join("")};
- q.oninput=fam.onchange=draw;draw();
+  const s=q.value.toLowerCase(),f=fam.value;
+  VIEW=DATA.filter(r=>(!f||r.Family===f)&&(!s||Object.values(r).join(" ").toLowerCase().includes(s)))
+   .sort((a,b)=>DIR*String(a[SORT]||"").localeCompare(String(b[SORT]||""),undefined,{numeric:true}));
+  const pages=Math.max(1,Math.ceil(VIEW.length/PER));PAGE=Math.min(PAGE,pages-1);
+  n.textContent=`${VIEW.length} of ${DATA.length} records`;
+  tb.innerHTML=VIEW.slice(PAGE*PER,PAGE*PER+PER).map(r=>`<tr tabindex="0" data-k="${esc(key(r))}"><td>${esc(key(r))}</td><td class="i">${esc(r["Scientific Name"])}</td><td>${esc(r.Family)}</td><td>${esc(r.Locality)}</td><td>${esc(r["Collect Date"])}</td></tr>`).join("");
+  pg.textContent=`Page ${PAGE+1} of ${pages}`;pv.disabled=PAGE==0;nx.disabled=PAGE>=pages-1;
+  document.querySelectorAll("th[data-s]").forEach(t=>t.setAttribute("aria-sort",t.dataset.s==SORT?(DIR>0?"ascending":"descending"):"none"))};
+ q.oninput=fam.onchange=()=>{PAGE=0;draw()};
+ pv.onclick=()=>{PAGE--;draw()};nx.onclick=()=>{PAGE++;draw()};
+ const hs=e=>{const t=e.target.closest("th[data-s]");if(t){DIR=SORT==t.dataset.s?-DIR:1;SORT=t.dataset.s;draw()}};
+ const th=document.querySelector("thead");th.onclick=hs;th.onkeydown=e=>{if(e.key=="Enter")hs(e)};
+ csv.onclick=()=>{const ks=Object.keys(DATA[0]||{});saveFile("kumf_records.csv",[ks.map(cq).join(","),...VIEW.map(r=>ks.map(k=>cq(r[k])).join(","))].join("\n"),"text/csv")};
  tb.onclick=e=>{const t=e.target.closest("tr");if(t)location.hash="id="+encodeURIComponent(t.dataset.k)};
- tb.onkeydown=e=>{if(e.key=="Enter")e.target.click()}}
+ tb.onkeydown=e=>{if(e.key=="Enter")e.target.click()};
+ draw()}
 
 /* ===== Record page ===== */
-const FIELDS=["Collection ID","Voucher ID","Tissue ID","Family","Amount","Parts","Length","Weight","Type","Preserved in","Collect Date","Gear","Collector","Identifier","Iden. Date","Locality","Latitude","Longitude","Depth","Field ID","Remarks"];
+const GROUPS=[["Specimen",["Collection ID","Voucher ID","Tissue ID","Field ID","Amount","Parts","Length","Weight","Type","Preserved in","Remarks"]],
+ ["Origin",["Locality","Latitude","Longitude","Depth","Gear","Collect Date","Collector"]],["Identification",["Identifier","Iden. Date"]]];
+function gallery(el,base){
+ const c=[[base+".jpg","Photo"],[base+"_xray.jpg","X-ray"]];
+ Promise.all(c.map(x=>new Promise(ok=>{const im=new Image();im.onload=()=>ok(x);im.onerror=()=>ok(null);im.src=x[0]}))).then(a=>{
+  const ok=a.filter(Boolean);
+  if(!ok.length){el.innerHTML=`<p>No specimen photo yet<br>(add ${esc(base.split("/").pop())}.jpg to the images folder)</p>`;return}
+  const show=i=>{el.innerHTML=`<img src="${esc(ok[i][0])}" alt="${ok[i][1]}">`+(ok.length>1?`<div class="thumbs">${ok.map((o,j)=>`<button data-j="${j}"${j==i?' aria-current="true"':""}>${o[1]}</button>`).join("")}</div>`:"");
+   el.querySelectorAll("button").forEach(b=>b.onclick=()=>show(+b.dataset.j))};
+  show(0)})}
 function record(id){
- const r=DATA.find(x=>key(x)===id);
+ const i=DATA.findIndex(x=>key(x)===id),r=DATA[i];
  if(!r){app.innerHTML=`<a class="back" href="#">← Back</a><p class="err">Record ${esc(id)} not found</p>`;return}
- const img=IMAGE_DIR+slug(key(r))+".jpg";
- const lat=parseFloat(r.Latitude),lng=parseFloat(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
- app.innerHTML=`<a class="back" href="#">← Back to list</a><div class="rec"><div>
-  <div class="photo"><img src="${esc(img)}" alt="${esc(r["Scientific Name"])}" onerror="this.parentNode.innerHTML='<p>No specimen photo yet<br>(add ${esc(slug(key(r)))}.jpg to the images folder)</p>'"></div>
-  ${geo?'<div id="map"></div>':""}</div>
-  <div><h2 class="i">${esc(r["Scientific Name"])}</h2><p class="au">${esc(r.Author)}</p>
-  <dl>${FIELDS.filter(k=>r[k]).map(k=>`<dt>${esc(k)}</dt><dd>${esc(r[k])}</dd>`).join("")}</dl></div></div>`;
+ const sn=r["Scientific Name"]||"",lat=parseFloat(r.Latitude),lng=parseFloat(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
+ const sec=(t,rows)=>rows.some(x=>x[1])?`<h3>${t}</h3><dl>${rows.filter(x=>x[1]).map(x=>`<dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd>`).join("")}</dl>`:"";
+ const tax=[["Order",r.Order],["Family",r.Family],["Family ID",r["Family ID"]],["Genus",sn.split(" ")[0]],["Species",sn],["Name",sn+(r.Author?" "+r.Author:"")]];
+ const L=(u,t)=>`<a target="_blank" rel="noopener" href="${u}">${t}</a>`;
+ app.innerHTML=`<nav class="nav"><a href="#">All records</a><span>/ ${esc(key(r))}</span><i></i>
+  <button id="pr"${i?"":" disabled"}>‹ Previous</button><button id="ne"${i<DATA.length-1?"":" disabled"}>Next ›</button></nav>
+  <div class="rec"><div><div class="photo" id="gal"></div>${geo?'<div id="map"></div>':""}
+  ${geo?`<p class="links">${L(`https://www.google.com/maps?q=${lat},${lng}`,"Google Maps")}${L(`https://earth.google.com/web/search/${lat},${lng}`,"Google Earth")}${L(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=9/${lat}/${lng}`,"OpenStreetMap")}</p>`:""}</div>
+  <div><h2 class="i">${esc(sn)}</h2><p class="au">${esc(r.Author)}</p>
+  <div class="tools"><button id="xt">Export TXT</button><button id="xx">Export XML</button><button id="ci">How to cite</button><button id="cl">Copy link</button></div>
+  <p id="cm" class="cite" hidden></p>${sec("Taxonomy",tax)}${GROUPS.map(g=>sec(g[0],g[1].map(k=>[k,r[k]]))).join("")}</div></div>`;
+ gallery(gal,IMAGE_DIR+slug(key(r)));
+ const go=j=>location.hash="id="+encodeURIComponent(key(DATA[j])),ks=Object.keys(r).filter(k=>r[k]),nm=key(r).replace(/\W+/g,"_");
+ pr.onclick=()=>go(i-1);ne.onclick=()=>go(i+1);
+ xt.onclick=()=>saveFile(nm+".txt",ks.map(k=>`${k}: ${r[k]}`).join("\n"),"text/plain");
+ xx.onclick=()=>{const t=k=>k.replace(/[^A-Za-z0-9]+/g,"_");saveFile(nm+".xml",`<?xml version="1.0" encoding="UTF-8"?>\n<specimen>\n${ks.map(k=>`  <${t(k)}>${esc(r[k])}</${t(k)}>`).join("\n")}\n</specimen>`,"application/xml")};
+ const cp=t=>navigator.clipboard&&navigator.clipboard.writeText(t).catch(()=>{});
+ ci.onclick=()=>{const t=`Kasetsart University Museum of Fisheries (KUMF). ${key(r)}, ${sn}${r.Author?" "+r.Author:""}. ${location.href} (accessed ${new Date().toISOString().slice(0,10)})`;cm.hidden=false;cm.textContent=t;cp(t)};
+ cl.onclick=()=>{cp(location.href);cl.textContent="Link copied"};
  if(geo&&window.L){const m=L.map("map").setView([lat,lng],7);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(m);L.marker([lat,lng]).addTo(m)}
  window.scrollTo(0,0)}
