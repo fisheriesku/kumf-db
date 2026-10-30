@@ -70,6 +70,7 @@ h3{margin:22px 0 4px;font:600 18px/1.2 Newsreader,Georgia,serif}
 // Leave empty to use the sample data below
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTm1bPaXaaBYnV7VkiwXJnrTUKnGvWTIKebbEj47pD-ARrvDnSH-ztazdxlMUShYibKsHXYV6Vk0LJV/pub?output=csv";
 const IMAGE_DIR = "images/";   // Name image files after the Voucher ID, e.g. KUMF_7778_1.jpg
+const FIELDS=["Collection ID","Voucher ID","Tissue ID","Order","Family","Family ID","Amount","Parts","Length","Weight","Type","Preserved in","Collect Date","Gear","Collector","Identifier","Iden. Date","Locality","Latitude","Longitude","Depth","Field ID","Remarks"];
 
 /* ===== Load data ===== */
 function parseCSV(t){let rows=[];let r=[],f="",q=false;
