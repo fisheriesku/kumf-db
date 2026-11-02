@@ -177,11 +177,11 @@ function record(id){
  const hh=(r["Determination History"]||"").split(";").map(x=>x.split("|").map(y=>y.trim())).filter(x=>x[0]);
  const hist=hh.length?`<h3>Determination history</h3><div class="wrap"><table><tbody>${hh.map(x=>`<tr><td>${esc(x[0])}</td><td>${esc(x[1])}</td><td class="i">${esc(x[2])}</td></tr>`).join("")}</tbody></table></div>`:"";
  const credit=[r["Photo Credit"]&&"Credit: "+r["Photo Credit"],r.License].filter(Boolean).join(" · ");
- const L=(u,t)=>`<a target="_blank" rel="noopener" href="${u}">${t}</a>`;
+ const lnk=(u,t)=>`<a target="_blank" rel="noopener" href="${u}">${t}</a>`;
  app.innerHTML=`<nav class="nav"><a href="#">All records</a><span>/ ${esc(key(r))}</span><i></i>
   <button id="pr"${i?"":" disabled"}>‹ Previous</button><button id="ne"${i<DATA.length-1?"":" disabled"}>Next ›</button></nav>
   <div class="rec"><div><div class="photo" id="gal"></div>${credit?`<p class="au">${esc(credit)}</p>`:""}${geo?'<div id="map"></div>':r.Locality?'<div id="map" hidden></div><p class="au" id="mapcap" hidden>Approximate location from locality name</p>':""}
-  ${geo?`<p class="links">${L(`https://www.google.com/maps?q=${lat},${lng}`,"Google Maps")}${L(`https://earth.google.com/web/search/${lat},${lng}`,"Google Earth")}${L(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=9/${lat}/${lng}`,"OpenStreetMap")}</p>`:""}</div>
+  ${geo?`<p class="links">${lnk(`https://www.google.com/maps?q=${lat},${lng}`,"Google Maps")}${lnk(`https://earth.google.com/web/search/${lat},${lng}`,"Google Earth")}${lnk(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=9/${lat}/${lng}`,"OpenStreetMap")}</p>`:""}</div>
   <div><h2 class="i">${esc(sn)}</h2><p class="au">${esc(r.Author)}</p>
   <div class="tools"><button id="xt">Export TXT</button><button id="xx">Export XML</button><button id="ci">How to cite</button><button id="cl">Copy link</button></div>
   <p id="cm" class="cite" hidden></p>${sec("Taxonomy",tax)}${GROUPS.map(g=>sec(g[0],g[1].map(k=>[k,r[k]]))).join("")}${other}${hist}</div></div>`;
