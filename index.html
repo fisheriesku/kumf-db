@@ -104,7 +104,11 @@ async function load(){
 /* ===== List page ===== */
 let LMAP=null,LGRP=null,MAPON=false;
 const coord=v=>{v=String(v||"").trim();if(!v)return NaN;let n=parseFloat(v);if(/[°'′]/.test(v)){const p=v.match(/[\d.]+/g)||[];n=(+p[0]||0)+(+p[1]||0)/60+(+p[2]||0)/3600}if(/[SWsw]\s*$/.test(v)||/^-/.test(v))n=-Math.abs(n);return n};
-let SORT="Voucher ID",DIR=1,PAGE=0,VIEW=[];const PER=50;
+let SORT="Voucher ID",DIR=1,PAGE=0,VIEW=[],GRUN=0;const PER=50;
+let GEO={};try{GEO=JSON.parse(localStorage.getItem("kumf_geo")||"{}")}catch(e){}
+const gq=r=>[r.Locality,r["State/Province"],r.Country].filter(Boolean).join(", ");
+let GQ=Promise.resolve();
+const geocode=q=>q in GEO?Promise.resolve(GEO[q]):(GQ=GQ.then(async()=>{if(q in GEO)return;await new Promise(x=>setTimeout(x,1100));try{const j=await(await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q="+encodeURIComponent(q))).json();GEO[q]=j[0]?[+j[0].lat,+j[0].lon]:null;try{localStorage.setItem("kumf_geo",JSON.stringify(GEO))}catch(e){}}catch(e){}}),GQ.then(()=>GEO[q]||null));
 const COLS=[["Voucher ID","Voucher ID"],["Scientific Name","Scientific name"],["Family","Family"],["Locality","Locality"],["Collect Date","Collect date"]];
 const saveFile=(n,t,m)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()};
 const cq=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
@@ -142,8 +146,10 @@ const drawMap=()=>{
   const pts=VIEW.filter(r=>!isNaN(coord(r.Latitude))&&!isNaN(coord(r.Longitude)));
   pts.forEach(r=>L.circleMarker([coord(r.Latitude),coord(r.Longitude)],{radius:8,color:"#0b3a4a",weight:2,fillColor:"#e0a100",fillOpacity:.9}).addTo(LGRP)
    .bindPopup(`<b>${esc(key(r))}</b><br><i>${esc(r["Scientific Name"])}</i><br>${esc(r.Locality)}<br><a href="#id=${encodeURIComponent(key(r))}">View record</a>`));
-  mapnote.textContent=`${pts.length} of ${VIEW.length} records have coordinates`;
-  LMAP.invalidateSize();if(pts.length)LMAP.fitBounds(LGRP.getBounds().pad(.2),{maxZoom:9})};
+  const rest=VIEW.filter(r=>!pts.includes(r)&&r.Locality),fit=()=>{LMAP.invalidateSize();if(LGRP.getLayers().length)LMAP.fitBounds(LGRP.getBounds().pad(.2),{maxZoom:9})};
+  let done=0,tried=0;const note=()=>{mapnote.textContent=`${pts.length} exact + ${done} approximate (from locality name) of ${VIEW.length} records`+(tried<rest.length?` · locating ${rest.length-tried} more…`:"")};
+  note();fit();const run=++GRUN;
+  rest.forEach(r=>geocode(gq(r)).then(p=>{if(run!==GRUN)return;tried++;if(p){L.circleMarker(p,{radius:8,color:"#0b3a4a",weight:2,dashArray:"3",fillColor:"#e0a100",fillOpacity:.35}).addTo(LGRP).bindPopup(`<b>${esc(key(r))}</b><br><i>${esc(r["Scientific Name"])}</i><br>${esc(r.Locality)}<br><small>Approximate location from locality name</small><br><a href="#id=${encodeURIComponent(key(r))}">View record</a>`);done++}note();fit()}))};
  const view=()=>{wrap.hidden=pager.hidden=MAPON;lmap.hidden=mapnote.hidden=!MAPON;vt.setAttribute("aria-pressed",!MAPON);vm.setAttribute("aria-pressed",MAPON);if(MAPON)drawMap()};
  vt.onclick=()=>{MAPON=false;view()};vm.onclick=()=>{MAPON=true;view()};
  LMAP=null;draw();view()}
@@ -174,7 +180,7 @@ function record(id){
  const L=(u,t)=>`<a target="_blank" rel="noopener" href="${u}">${t}</a>`;
  app.innerHTML=`<nav class="nav"><a href="#">All records</a><span>/ ${esc(key(r))}</span><i></i>
   <button id="pr"${i?"":" disabled"}>‹ Previous</button><button id="ne"${i<DATA.length-1?"":" disabled"}>Next ›</button></nav>
-  <div class="rec"><div><div class="photo" id="gal"></div>${credit?`<p class="au">${esc(credit)}</p>`:""}${geo?'<div id="map"></div>':""}
+  <div class="rec"><div><div class="photo" id="gal"></div>${credit?`<p class="au">${esc(credit)}</p>`:""}${geo?'<div id="map"></div>':r.Locality?'<div id="map" hidden></div><p class="au" id="mapcap" hidden>Approximate location from locality name</p>':""}
   ${geo?`<p class="links">${L(`https://www.google.com/maps?q=${lat},${lng}`,"Google Maps")}${L(`https://earth.google.com/web/search/${lat},${lng}`,"Google Earth")}${L(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=9/${lat}/${lng}`,"OpenStreetMap")}</p>`:""}</div>
   <div><h2 class="i">${esc(sn)}</h2><p class="au">${esc(r.Author)}</p>
   <div class="tools"><button id="xt">Export TXT</button><button id="xx">Export XML</button><button id="ci">How to cite</button><button id="cl">Copy link</button></div>
@@ -189,6 +195,7 @@ function record(id){
  cl.onclick=()=>{cp(location.href);cl.textContent="Link copied"};
  if(geo&&window.L){const m=L.map("map").setView([lat,lng],7);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(m);L.marker([lat,lng]).addTo(m)}
+ if(!geo&&r.Locality&&window.L)geocode(gq(r)).then(p=>{if(!p||location.hash!=="#id="+encodeURIComponent(key(r)))return;map.hidden=mapcap.hidden=false;const m=L.map("map").setView(p,8);L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(m);L.circleMarker(p,{radius:9,color:"#0b3a4a",weight:2,dashArray:"3",fillColor:"#e0a100",fillOpacity:.35}).addTo(m)});
  window.scrollTo(0,0)}
 
 function route(){const m=location.hash.match(/^#id=(.+)/);m?record(decodeURIComponent(m[1])):list()}
