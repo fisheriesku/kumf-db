@@ -54,6 +54,9 @@ h3{margin:22px 0 4px;font:600 18px/1.2 Newsreader,Georgia,serif}
 .cite{padding:10px 12px;border-left:4px solid var(--amber);background:var(--panel);margin:12px 0 0;word-break:break-word}
 .thumbs{display:flex;gap:6px;padding:8px;background:#111}.thumbs button{padding:4px 12px;background:#222;color:#ddd;border-color:#444}.thumbs [aria-current]{border-color:var(--amber);color:var(--amber)}
 .links{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
+[hidden]{display:none!important}
+#lmap{height:540px;border-radius:6px;border:1px solid var(--line)}
+button[aria-pressed=true]{background:var(--sea);color:#fff;border-color:var(--sea)}
 </style>
 </head>
 <body>
@@ -71,6 +74,8 @@ h3{margin:22px 0 4px;font:600 18px/1.2 Newsreader,Georgia,serif}
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTm1bPaXaaBYnV7VkiwXJnrTUKnGvWTIKebbEj47pD-ARrvDnSH-ztazdxlMUShYibKsHXYV6Vk0LJV/pub?output=csv";
 const IMAGE_DIR = "images/";   // Name image files after the Voucher ID, e.g. KUMF_7778_1.jpg
 const FIELDS=["Collection ID","Voucher ID","Tissue ID","Order","Family","Family ID","Amount","Parts","Length","Weight","Type","Preserved in","Collect Date","Gear","Collector","Identifier","Iden. Date","Locality","Latitude","Longitude","Depth","Field ID","Remarks"];
+
+const SAMPLE = [{"Collection ID":"KUMF 7778","Voucher ID":"KUMF 7778.1","Tissue ID":"KUMF T-7778.1","Scientific Name":"Soleichthys siammakuti","Author":"(Wongratana, 1975)","Family":"Soleidae","Amount":"2","Preserved in":"Fixed in formalin preserved in EtOH","Collect Date":"2026-09-19","Locality":"Chonburi","Latitude":"","Longitude":"","Depth":"","Gear":"","Collector":"Tongboonkua P.","Identifier":"Tongboonkua P.","Iden. Date":"2026-09-19","Parts":"","Length":"","Weight":"","Type":"","Field ID":"PTKU 2155","Remarks":""}];
 
 /* ===== Load data ===== */
 function parseCSV(t){let rows=[];let r=[],f="",q=false;
@@ -97,6 +102,8 @@ async function load(){
  DATA=parseCSV(await res.text())}
 
 /* ===== List page ===== */
+let LMAP=null,LGRP=null,MAPON=false;
+const coord=v=>{v=String(v||"").trim();if(!v)return NaN;let n=parseFloat(v);if(/[°'′]/.test(v)){const p=v.match(/[\d.]+/g)||[];n=(+p[0]||0)+(+p[1]||0)/60+(+p[2]||0)/3600}if(/[SWsw]\s*$/.test(v)||/^-/.test(v))n=-Math.abs(n);return n};
 let SORT="Voucher ID",DIR=1,PAGE=0,VIEW=[];const PER=50;
 const COLS=[["Voucher ID","Voucher ID"],["Scientific Name","Scientific name"],["Family","Family"],["Locality","Locality"],["Collect Date","Collect date"]];
 const saveFile=(n,t,m)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()};
@@ -106,10 +113,11 @@ function list(){
  app.innerHTML=`<div class="bar">
   <input id="q" type="search" placeholder="Search scientific name, ID, locality, collector…" aria-label="Search">
   <select id="fam" aria-label="Family"><option value="">All families</option>${fams.map(f=>`<option>${esc(f)}</option>`).join("")}</select>
-  <button id="csv">Download CSV</button></div>
+  <button id="vt" aria-pressed="true">Table</button><button id="vm" aria-pressed="false">Map</button><button id="csv">Download CSV</button></div>
   <p class="count" id="n"></p>
-  <div class="wrap"><table><thead><tr>${COLS.map(c=>`<th tabindex="0" data-s="${c[0]}">${c[1]}</th>`).join("")}</tr></thead><tbody id="tb"></tbody></table></div>
-  <div class="pager"><button id="pv">← Previous</button><span id="pg"></span><button id="nx">Next →</button></div>`;
+  <div id="lmap" hidden></div><p id="mapnote" class="count" hidden></p>
+  <div class="wrap" id="wrap"><table><thead><tr>${COLS.map(c=>`<th tabindex="0" data-s="${c[0]}">${c[1]}</th>`).join("")}</tr></thead><tbody id="tb"></tbody></table></div>
+  <div class="pager" id="pager"><button id="pv">← Previous</button><span id="pg"></span><button id="nx">Next →</button></div>`;
  const draw=()=>{
   const s=q.value.toLowerCase(),f=fam.value;
   VIEW=DATA.filter(r=>(!f||r.Family===f)&&(!s||Object.values(r).join(" ").toLowerCase().includes(s)))
@@ -118,6 +126,7 @@ function list(){
   n.textContent=`${VIEW.length} of ${DATA.length} records`;
   tb.innerHTML=VIEW.slice(PAGE*PER,PAGE*PER+PER).map(r=>`<tr tabindex="0" data-k="${esc(key(r))}"><td>${esc(key(r))}</td><td class="i">${esc(r["Scientific Name"])}</td><td>${esc(r.Family)}</td><td>${esc(r.Locality)}</td><td>${esc(r["Collect Date"])}</td></tr>`).join("");
   pg.textContent=`Page ${PAGE+1} of ${pages}`;pv.disabled=PAGE==0;nx.disabled=PAGE>=pages-1;
+  if(MAPON&&window.lmap)drawMap();
   document.querySelectorAll("th[data-s]").forEach(t=>t.setAttribute("aria-sort",t.dataset.s==SORT?(DIR>0?"ascending":"descending"):"none"))};
  q.oninput=fam.onchange=()=>{PAGE=0;draw()};
  pv.onclick=()=>{PAGE--;draw()};nx.onclick=()=>{PAGE++;draw()};
@@ -126,7 +135,18 @@ function list(){
  csv.onclick=()=>{const ks=Object.keys(DATA[0]||{});saveFile("kumf_records.csv",[ks.map(cq).join(","),...VIEW.map(r=>ks.map(k=>cq(r[k])).join(","))].join("\n"),"text/csv")};
  tb.onclick=e=>{const t=e.target.closest("tr");if(t)location.hash="id="+encodeURIComponent(t.dataset.k)};
  tb.onkeydown=e=>{if(e.key=="Enter")e.target.click()};
- draw()}
+const drawMap=()=>{
+  if(!window.L){lmap.innerHTML='<p class="err">Map library failed to load</p>';return}
+  if(!LMAP){LMAP=L.map("lmap").setView([13,101],5);L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(LMAP);LGRP=L.featureGroup().addTo(LMAP)}
+  LGRP.clearLayers();
+  const pts=VIEW.filter(r=>!isNaN(coord(r.Latitude))&&!isNaN(coord(r.Longitude)));
+  pts.forEach(r=>L.circleMarker([coord(r.Latitude),coord(r.Longitude)],{radius:8,color:"#0b3a4a",weight:2,fillColor:"#e0a100",fillOpacity:.9}).addTo(LGRP)
+   .bindPopup(`<b>${esc(key(r))}</b><br><i>${esc(r["Scientific Name"])}</i><br>${esc(r.Locality)}<br><a href="#id=${encodeURIComponent(key(r))}">View record</a>`));
+  mapnote.textContent=`${pts.length} of ${VIEW.length} records have coordinates`;
+  LMAP.invalidateSize();if(pts.length)LMAP.fitBounds(LGRP.getBounds().pad(.2),{maxZoom:9})};
+ const view=()=>{wrap.hidden=pager.hidden=MAPON;lmap.hidden=mapnote.hidden=!MAPON;vt.setAttribute("aria-pressed",!MAPON);vm.setAttribute("aria-pressed",MAPON);if(MAPON)drawMap()};
+ vt.onclick=()=>{MAPON=false;view()};vm.onclick=()=>{MAPON=true;view()};
+ LMAP=null;draw();view()}
 
 /* ===== Record page ===== */
 const GROUPS=[["Specimen",["Collection ID","Voucher ID","Tissue ID","Field ID","Amount","Parts","Length","Weight","Type","Preserved in","Remarks"]],
@@ -142,7 +162,7 @@ function gallery(el,base){
 function record(id){
  const i=DATA.findIndex(x=>key(x)===id),r=DATA[i];
  if(!r){app.innerHTML=`<a class="back" href="#">← Back</a><p class="err">Record ${esc(id)} not found</p>`;return}
- const sn=r["Scientific Name"]||"",lat=parseFloat(r.Latitude),lng=parseFloat(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
+ const sn=r["Scientific Name"]||"",lat=coord(r.Latitude),lng=coord(r.Longitude),geo=!isNaN(lat)&&!isNaN(lng);
  const sec=(t,rows)=>rows.some(x=>x[1])?`<h3>${t}</h3><dl>${rows.filter(x=>x[1]).map(x=>`<dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd>`).join("")}</dl>`:"";
  const tax=[["Order",r.Order],["Family",r.Family],["Family ID",r["Family ID"]],["Genus",sn.split(" ")[0]],["Species",sn],["Name",sn+(r.Author?" "+r.Author:"")]];
  const L=(u,t)=>`<a target="_blank" rel="noopener" href="${u}">${t}</a>`;
