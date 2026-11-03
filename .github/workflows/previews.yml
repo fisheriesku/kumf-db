@@ -1,0 +1,36 @@
+name: Make image previews
+on:
+  push:
+    branches: [main]
+    paths: ['images/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+jobs:
+  previews:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Create previews (1600 px wide) for new or replaced originals
+        run: |
+          command -v convert >/dev/null || sudo apt-get install -y imagemagick
+          changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
+          while read -r f; do
+            out="${f%.*}_preview.jpg"
+            if [ ! -f "$out" ] || echo "$changed" | grep -qxF "$f"; then
+              convert "$f" -auto-orient -resize '1600x1600>' -strip -interlace Plane -quality 80 "$out"
+              echo "made $out"
+            fi
+          done < <(find images -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) ! -iname '*_preview.*')
+      - name: Commit previews and rebuild the site
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add images
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add image previews'
+          git push
+          curl -s -X POST -H 'Accept: application/vnd.github+json' -H 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' https://api.github.com/repos/${{ github.repository }}/pages/builds || true
